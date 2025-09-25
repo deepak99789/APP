@@ -193,8 +193,15 @@ def fetch_data(symbols, start, end, interval):
     for symbol in symbols:
         try:
             df = yf.download(symbol, start=start, end=end, interval=interval)
-            if not df.empty:
-                data[symbol] = df
+            if not df.empty and 'High' in df.columns and 'Low' in df.columns and 'Close' in df.columns:
+                # Ensure no NaN values in critical columns
+                df = df.dropna(subset=['High', 'Low', 'Close', 'Open'])
+                if not df.empty:
+                    data[symbol] = df
+                else:
+                    st.warning(f"No valid data for {symbol} after cleaning.")
+            else:
+                st.warning(f"No valid data for {symbol}.")
         except Exception as e:
             st.error(f"Error fetching {symbol}: {e}")
     return data
@@ -243,11 +250,19 @@ def detect_pattern(df, min_body_rd, max_body_b, num_bases, required_zone_type, r
     if all(b == 'Base' for b in bases):
         pattern = None
         is_demand = False
-        zone_low = min(recent_candles['Low'])
-        zone_high = max(recent_candles['High'])
+        
+        # Check if base_candles has valid data
         base_candles = recent_candles.iloc[1:1+num_bases]
-        base_max_high = float(max(base_candles['High']))  # Max high of base candles
-        base_min_low = float(min(base_candles['Low']))   # Min low of base candles
+        if base_candles.empty or base_candles['High'].isna().all() or base_candles['Low'].isna().all():
+            return 'No Pattern', 0.0, 0.0, 0, 0.0, 0.0, 0.0, 'NONE'
+        
+        try:
+            zone_low = float(min(recent_candles['Low']))
+            zone_high = float(max(recent_candles['High']))
+            base_max_high = float(max(base_candles['High']))  # Max high of base candles
+            base_min_low = float(min(base_candles['Low']))   # Min low of base candles
+        except (ValueError, TypeError):
+            return 'No Pattern', 0.0, 0.0, 0, 0.0, 0.0, 0.0, 'NONE'
         
         # Pattern detection
         if leg_in == 'Rally' and leg_out == 'Rally':
@@ -271,7 +286,11 @@ def detect_pattern(df, min_body_rd, max_body_b, num_bases, required_zone_type, r
             return 'No Pattern', 0.0, 0.0, 0, 0.0, 0.0, 0.0, 'NONE'
         
         # Entry and Stoploss logic
-        current_price = float(df.iloc[-1]['Close'])
+        try:
+            current_price = float(df.iloc[-1]['Close'])
+        except (ValueError, TypeError):
+            return 'No Pattern', 0.0, 0.0, 0, 0.0, 0.0, 0.0, 'NONE'
+        
         entry_price = base_max_high if is_demand else base_min_low
         sl_price = zone_low * (1 - sl_buffer_pct / 100) if is_demand else zone_high * (1 + sl_buffer_pct / 100)
         risk = abs(entry_price - sl_price)
@@ -345,6 +364,8 @@ if st.sidebar.button("SCAN"):
                         'Demand_Score': demand_score,
                         'Supply_Score': supply_score
                     })
+                else:
+                    st.info(f"No matching pattern found for {symbol}.")
         
         if results:
             df_results = pd.DataFrame(results)
@@ -364,7 +385,7 @@ if st.sidebar.button("SCAN"):
                 supply_count = len(df_results[df_results['Supply_Score'] > 0])
                 st.metric("Supply Zones", supply_count)
         else:
-            st.info("No matching zones found with current filters.")
+            st.info("No matching zones found with current filters. Try adjusting the date range, interval, or symbols.")
 
 # Instructions
 with st.expander("Deployment Instructions"):
