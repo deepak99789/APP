@@ -49,8 +49,8 @@ symbol_lists = {
         "INFOEDGE.NS", "MCDOWELL-N.NS", "AMBUJACEM.NS", "DLF.NS", "BANKBARODA.NS", "INDIGO.NS",
         "COLPAL.NS", "PNB.NS", "IOC.NS", "LUPIN.NS", "BERGEPAINT.NS", "GAIL.NS", "AUROPHARMA.NS",
         "BOSCHLTD.NS", "JUBLFOOD.NS", "BIOCON.NS", "ICICIPRULI.NS", "MUTHOOTFIN.NS", "TORNTPHARM.NS",
-        "ICICIGI.NS", "TRENT.NS", "LTI.NS", "MPHASIS.NS", "ACC.NS", "HDFCAMC.NS", "NAUKRI.NS",
-        "TATAPOWER.NS", "ZOMATO.NS", "LTIM.NS", "IDFCFIRSTB.NS", "BANDHANBNK.NS", "BEL.NS",
+        "ICICIGI.NS", "TRENT.NS", "LTIM.NS", "MPHASIS.NS", "ACC.NS", "HDFCAMC.NS", "NAUKRI.NS",
+        "TATAPOWER.NS", "ZOMATO.NS", "IDFCFIRSTB.NS", "BANDHANBNK.NS", "BEL.NS",
         "GODREJPROP.NS", "CONCOR.NS", "PETRONET.NS", "ASHOKLEY.NS", "MRF.NS", "VBL.NS",
         "BALKRISIND.NS", "CHOLAFIN.NS"
     ],
@@ -67,8 +67,8 @@ symbol_lists = {
         "INFOEDGE.NS", "MCDOWELL-N.NS", "AMBUJACEM.NS", "DLF.NS", "BANKBARODA.NS", "INDIGO.NS",
         "COLPAL.NS", "PNB.NS", "IOC.NS", "LUPIN.NS", "BERGEPAINT.NS", "GAIL.NS", "AUROPHARMA.NS",
         "BOSCHLTD.NS", "JUBLFOOD.NS", "BIOCON.NS", "ICICIPRULI.NS", "MUTHOOTFIN.NS", "TORNTPHARM.NS",
-        "ICICIGI.NS", "TRENT.NS", "LTI.NS", "MPHASIS.NS", "ACC.NS", "HDFCAMC.NS", "NAUKRI.NS",
-        "TATAPOWER.NS", "ZOMATO.NS", "LTIM.NS", "IDFCFIRSTB.NS", "BANDHANBNK.NS", "BEL.NS",
+        "ICICIGI.NS", "TRENT.NS", "LTIM.NS", "MPHASIS.NS", "ACC.NS", "HDFCAMC.NS", "NAUKRI.NS",
+        "TATAPOWER.NS", "ZOMATO.NS", "IDFCFIRSTB.NS", "BANDHANBNK.NS", "BEL.NS",
         "GODREJPROP.NS", "CONCOR.NS", "PETRONET.NS", "ASHOKLEY.NS", "MRF.NS", "VBL.NS",
         "BALKRISIND.NS", "CHOLAFIN.NS", "APOLLOTYRE.NS", "BATAINDIA.NS", "BHARATFORG.NS", "CANBK.NS",
         "CUMMINSIND.NS", "DEEPAKNTR.NS", "ESCORTS.NS", "EXIDEIND.NS", "GLENMARK.NS", "GMRINFRA.NS",
@@ -95,8 +95,8 @@ symbol_lists = {
         "INFOEDGE.NS", "MCDOWELL-N.NS", "AMBUJACEM.NS", "DLF.NS", "BANKBARODA.NS", "INDIGO.NS",
         "COLPAL.NS", "PNB.NS", "IOC.NS", "LUPIN.NS", "BERGEPAINT.NS", "GAIL.NS", "AUROPHARMA.NS",
         "BOSCHLTD.NS", "JUBLFOOD.NS", "BIOCON.NS", "ICICIPRULI.NS", "MUTHOOTFIN.NS", "TORNTPHARM.NS",
-        "ICICIGI.NS", "TRENT.NS", "LTI.NS", "MPHASIS.NS", "ACC.NS", "HDFCAMC.NS", "NAUKRI.NS",
-        "TATAPOWER.NS", "ZOMATO.NS", "LTIM.NS", "IDFCFIRSTB.NS", "BANDHANBNK.NS", "BEL.NS",
+        "ICICIGI.NS", "TRENT.NS", "LTIM.NS", "MPHASIS.NS", "ACC.NS", "HDFCAMC.NS", "NAUKRI.NS",
+        "TATAPOWER.NS", "ZOMATO.NS", "IDFCFIRSTB.NS", "BANDHANBNK.NS", "BEL.NS",
         "GODREJPROP.NS", "CONCOR.NS", "PETRONET.NS", "ASHOKLEY.NS", "MRF.NS", "VBL.NS",
         "BALKRISIND.NS", "CHOLAFIN.NS", "APOLLOTYRE.NS", "BATAINDIA.NS", "BHARATFORG.NS", "CANBK.NS",
         "CUMMINSIND.NS", "DEEPAKNTR.NS", "ESCORTS.NS", "EXIDEIND.NS", "GLENMARK.NS", "GMRINFRA.NS",
@@ -183,7 +183,7 @@ max_body_base = st.sidebar.slider("Max Body % for Base", 0, 100, 50)
 
 # Risk-Reward Settings
 st.sidebar.header("Entry & Stoploss Settings")
-rr_ratio = 5.0  # Fixed RR 1:5 as per request
+rr_ratio = 5.0  # Fixed RR 1:5
 sl_buffer_pct = st.sidebar.number_input("Stoploss Buffer %", min_value=0.0, value=1.0, step=0.5)
 
 # Fetch data function
@@ -201,25 +201,28 @@ def fetch_data(symbols, start, end, interval):
 
 # Function to classify a single candle
 def classify_candle(row, min_body_rd, max_body_b):
-    high_low_range = row['High'] - row['Low']
-    if high_low_range == 0:
+    try:
+        high_low_range = float(row['High'] - row['Low'])
+        if high_low_range <= 0:
+            return 'Neutral'
+        
+        body = abs(float(row['Close'] - row['Open']))
+        body_pct = (body / high_low_range) * 100
+        
+        is_green = float(row['Close']) > float(row['Open'])
+        is_red = float(row['Close']) < float(row['Open'])
+        
+        if body_pct > min_body_rd:
+            if is_green:
+                return 'Rally'
+            elif is_red:
+                return 'Drop'
+        elif body_pct < max_body_b:
+            return 'Base'
+        
         return 'Neutral'
-    
-    body = abs(row['Close'] - row['Open'])
-    body_pct = (body / high_low_range) * 100
-    
-    is_green = row['Close'] > row['Open']
-    is_red = row['Close'] < row['Open']
-    
-    if body_pct > min_body_rd:
-        if is_green:
-            return 'Rally'
-        elif is_red:
-            return 'Drop'
-    elif body_pct < max_body_b:
-        return 'Base'
-    
-    return 'Neutral'
+    except (TypeError, ValueError):
+        return 'Neutral'  # Handle invalid data
 
 # Function to detect patterns with Entry/Stoploss
 def detect_pattern(df, min_body_rd, max_body_b, num_bases, required_zone_type, rr_ratio, sl_buffer_pct):
@@ -243,8 +246,8 @@ def detect_pattern(df, min_body_rd, max_body_b, num_bases, required_zone_type, r
         zone_low = min(recent_candles['Low'])
         zone_high = max(recent_candles['High'])
         base_candles = recent_candles.iloc[1:1+num_bases]
-        base_max_high = max(base_candles['High'])  # Max high of base candles
-        base_min_low = min(base_candles['Low'])   # Min low of base candles
+        base_max_high = float(max(base_candles['High']))  # Max high of base candles
+        base_min_low = float(min(base_candles['Low']))   # Min low of base candles
         
         # Pattern detection
         if leg_in == 'Rally' and leg_out == 'Rally':
@@ -268,7 +271,7 @@ def detect_pattern(df, min_body_rd, max_body_b, num_bases, required_zone_type, r
             return 'No Pattern', 0.0, 0.0, 0, 0.0, 0.0, 0.0, 'NONE'
         
         # Entry and Stoploss logic
-        current_price = df.iloc[-1]['Close']
+        current_price = float(df.iloc[-1]['Close'])
         entry_price = base_max_high if is_demand else base_min_low
         sl_price = zone_low * (1 - sl_buffer_pct / 100) if is_demand else zone_high * (1 + sl_buffer_pct / 100)
         risk = abs(entry_price - sl_price)
