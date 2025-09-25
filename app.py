@@ -3,6 +3,7 @@ import pandas as pd
 import yfinance as yf
 from datetime import datetime, timedelta
 import numpy as np
+import time
 
 # Page config
 st.set_page_config(page_title="Supply Demand Screener", layout="wide")
@@ -186,24 +187,31 @@ st.sidebar.header("Entry & Stoploss Settings")
 rr_ratio = 5.0  # Fixed RR 1:5
 sl_buffer_pct = st.sidebar.number_input("Stoploss Buffer %", min_value=0.0, value=1.0, step=0.5)
 
-# Fetch data function
+# Fetch data function with retry logic
 @st.cache_data
 def fetch_data(symbols, start, end, interval):
     data = {}
     for symbol in symbols:
-        try:
-            df = yf.download(symbol, start=start, end=end, interval=interval)
-            if not df.empty and 'High' in df.columns and 'Low' in df.columns and 'Close' in df.columns:
-                # Ensure no NaN values in critical columns
-                df = df.dropna(subset=['High', 'Low', 'Close', 'Open'])
-                if not df.empty:
-                    data[symbol] = df
+        for attempt in range(3):  # Retry up to 3 times
+            try:
+                df = yf.download(symbol, start=start, end=end, interval=interval, progress=False)
+                if not df.empty and all(col in df.columns for col in ['High', 'Low', 'Close', 'Open']):
+                    # Ensure no NaN values in critical columns and convert to float
+                    df = df.dropna(subset=['High', 'Low', 'Close', 'Open'])
+                    df[['High', 'Low', 'Close', 'Open']] = df[['High', 'Low', 'Close', 'Open']].astype(float)
+                    if not df.empty:
+                        data[symbol] = df
+                        st.info(f"Successfully fetched data for {symbol} ({len(df)} rows).")
+                        break
+                    else:
+                        st.warning(f"No valid data for {symbol} after cleaning (all rows dropped due to NaN).")
                 else:
-                    st.warning(f"No valid data for {symbol} after cleaning.")
-            else:
-                st.warning(f"No valid data for {symbol}.")
-        except Exception as e:
-            st.error(f"Error fetching {symbol}: {e}")
+                    st.warning(f"No valid data for {symbol} (empty or missing columns).")
+            except Exception as e:
+                st.error(f"Error fetching {symbol} (attempt {attempt+1}/3): {e}")
+                time.sleep(1)  # Wait before retrying
+            if attempt == 2:
+                st.error(f"Failed to fetch data for {symbol} after 3 attempts.")
     return data
 
 # Function to classify a single candle
@@ -342,12 +350,13 @@ if st.sidebar.button("SCAN"):
     if not symbols:
         st.warning("Please select script type or enter symbols.")
     else:
-        with st.spinner("Fetching data and scanning..."):
+        with st.spinner(f"Fetching data for {len(symbols)} symbols and scanning..."):
             data = fetch_data(symbols, start_date, end_date, yf_interval)
         
         results = []
         for symbol, df in data.items():
             if not df.empty:
+                st.info(f"Processing {symbol} with {len(df)} candles.")
                 pattern, demand_score, supply_score, match, entry_price, sl_price, target_price, status = detect_pattern(
                     df, min_body_rally_drop, max_body_base, num_base_candles, zone_type, rr_ratio, sl_buffer_pct
                 )
@@ -366,6 +375,8 @@ if st.sidebar.button("SCAN"):
                     })
                 else:
                     st.info(f"No matching pattern found for {symbol}.")
+            else:
+                st.warning(f"No data available for {symbol}.")
         
         if results:
             df_results = pd.DataFrame(results)
@@ -385,7 +396,7 @@ if st.sidebar.button("SCAN"):
                 supply_count = len(df_results[df_results['Supply_Score'] > 0])
                 st.metric("Supply Zones", supply_count)
         else:
-            st.info("No matching zones found with current filters. Try adjusting the date range, interval, or symbols.")
+            st.info("No matching zones found. Try adjusting the date range (e.g., last 60 days), interval (e.g., DAILY), or symbols.")
 
 # Instructions
 with st.expander("Deployment Instructions"):
@@ -395,8 +406,9 @@ with st.expander("Deployment Instructions"):
        ```
        streamlit
        pandas
-       yfinance
+       yfinance>=0.2.41
        numpy
        ```
     3. Deploy on Streamlit Cloud via GitHub (streamlit.io/cloud).
+    4. If issues persist, check logs in 'Manage app' and verify symbol list, date range, and interval.
     """)
